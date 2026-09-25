@@ -1,6 +1,8 @@
 name: Verify CME cloud collection
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
 permissions:
   contents: read
 concurrency:
