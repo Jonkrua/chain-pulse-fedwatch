@@ -40,7 +40,8 @@ jobs:
               with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
                   assert response.status == 200
               print('Validated probabilities published successfully.')
-          except Exception:
+          except Exception as error:
+              print("Upload diagnostic:", type(error).__name__, getattr(error, "code", "network"))
               raise SystemExit('Publishing failed; previous dashboard data is retained.')
           PY
       - name: Save validated data
