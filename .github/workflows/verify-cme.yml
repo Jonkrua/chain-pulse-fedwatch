@@ -71,6 +71,8 @@ jobs:
                           meetings.append({'tabLabel': label, 'text': text, 'tables': tables})
                       result = {'source': SOURCE, 'collectedAt': datetime.now(timezone.utc).isoformat(), 'meetings': meetings, 'validated': False}
                       (out / 'raw.json').write_text(json.dumps(result, indent=2))
+                      for meeting in meetings:
+                          print('MEETING_VIEW', json.dumps({'tabLabel': meeting['tabLabel'], 'text': meeting['text']}))
                       print(f'Collected {len(meetings)} meeting views. Raw output requires validation before publication.')
                   except Exception as error:
                       (out / 'error.txt').write_text(str(error))
