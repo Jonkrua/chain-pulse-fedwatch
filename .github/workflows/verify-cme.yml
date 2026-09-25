@@ -35,7 +35,7 @@ jobs:
               def redirect_request(self, *args, **kwargs):
                   return None
           payload = pathlib.Path('result/latest.json').read_bytes()
-          request = urllib.request.Request('https://chain-pulse-fedwatch-data.jaedonwu.workers.dev/ingest', data=payload, headers={'Authorization': 'Bearer ' + os.environ['INGEST_KEY'], 'Content-Type': 'application/json'}, method='POST')
+          request = urllib.request.Request('https://uexhk.xyz/api/fedwatch/ingest', data=payload, headers={'Authorization': 'Bearer ' + os.environ['INGEST_KEY'], 'Content-Type': 'application/json'}, method='POST')
           try:
               with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
                   assert response.status == 200
