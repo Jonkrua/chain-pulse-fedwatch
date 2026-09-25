@@ -4,93 +4,29 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: fedwatch-verification
+  group: fedwatch-collection
   cancel-in-progress: false
 jobs:
   collect:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Test parser
+        run: python -m unittest discover -p 'test_*.py'
       - name: Install browser
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
-      - name: Read official CME tables
-        shell: python
-        run: |
-          import asyncio, json, pathlib, re, time
-          from datetime import datetime, timezone
-          from playwright.async_api import async_playwright
-          SOURCE = 'https://www.cmegroup.cn/fed-watch/'
-          out = pathlib.Path('result')
-          out.mkdir(exist_ok=True)
-          async def main():
-              async with async_playwright() as p:
-                  browser = await p.chromium.launch(headless=True)
-                  page = await browser.new_page(viewport={'width': 1440, 'height': 1100})
-                  try:
-                      response = await page.goto(SOURCE, wait_until='domcontentloaded', timeout=60000)
-                      if response and response.status >= 400:
-                          raise RuntimeError(f'CME HTTP {response.status}; access restrictions are not bypassed')
-                      deadline = time.monotonic() + 90
-                      target = None
-                      while time.monotonic() < deadline:
-                          for frame in page.frames:
-                              if not frame.url.startswith('https://cmegroup-tools.quikstrike.net/'):
-                                  continue
-                              text = await frame.locator('body').inner_text(timeout=5000)
-                              if re.search(r'access denied|captcha|verify you are human', text, re.I):
-                                  raise RuntimeError('Source requires verification; not bypassed')
-                              if 'PROBABILITIES' in text.upper() and re.search(r'\d+(?:\.\d+)?%', text):
-                                  target = frame
-                                  break
-                          if target:
-                              break
-                          await asyncio.sleep(2)
-                      if target is None:
-                          raise RuntimeError('No complete probability component loaded')
-                      initial = await target.locator('body').inner_text()
-                      (out / 'initial.txt').write_text(initial)
-                      if not re.search(r'Data as of', initial, re.I):
-                          raise RuntimeError('Missing CME source timestamp')
-                      tabs = target.locator('a[id*="lbMeeting"]')
-                      count = await tabs.count()
-                      if count < 1 or count > 24:
-                          raise RuntimeError(f'Unexpected meeting tab count: {count}')
-                      meetings = []
-                      for i in range(count):
-                          tab = tabs.nth(i)
-                          label = (await tab.inner_text()).strip()
-                          await tab.click()
-                          await asyncio.sleep(3)
-                          text = await target.locator('body').inner_text()
-                          tables = await target.locator('table').evaluate_all('(tables) => tables.map(t => Array.from(t.rows, r => Array.from(r.cells, c => c.innerText)))')
-                          meetings.append({'tabLabel': label, 'text': text, 'tables': tables})
-                      result = {'source': SOURCE, 'collectedAt': datetime.now(timezone.utc).isoformat(), 'meetings': meetings, 'validated': False}
-                      (out / 'raw.json').write_text(json.dumps(result, indent=2))
-                      for meeting in meetings:
-                          print('MEETING_VIEW', json.dumps({'tabLabel': meeting['tabLabel'], 'text': meeting['text']}))
-                      print(f'Collected {len(meetings)} meeting views. Raw output requires validation before publication.')
-                  except Exception as error:
-                      (out / 'error.txt').write_text(str(error))
-                      print('Collection error:', str(error))
-                      raise
-                  finally:
-                      try:
-                          (out / 'page.txt').write_text(await page.locator('body').inner_text(timeout=5000))
-                          print('Frame URLs:', [f.url.split('?')[0] for f in page.frames])
-                      except Exception as diagnostic_error:
-                          print('Diagnostic unavailable:', type(diagnostic_error).__name__)
-                      await browser.close()
-          asyncio.run(main())
-      - name: Save diagnostic output
-        if: always()
+      - name: Collect and validate every CME meeting
+        run: python collector.py
+      - name: Save validated data
         uses: actions/upload-artifact@v4
         with:
-          name: cme-verification
-          path: result/
+          name: cme-validated
+          path: result/latest.json
           retention-days: 3
-          if-no-files-found: warn
+          if-no-files-found: error
