@@ -45,4 +45,19 @@ class ParserTests(unittest.TestCase):
         snapshot = validate_snapshot([{'text': TEXT, 'tabLabel': '28 Oct26'}], datetime(2026, 9, 25, tzinfo=timezone.utc))
         self.assertNotEqual(snapshot['collectedAt'], snapshot['meetings'][0]['sourceAsOf'])
 
+    def test_midnight_12_hour_label_is_explicitly_inferred(self):
+        text = TEXT.replace('24 Sep 2026 10:43:49', '25 Sep 2026 12:49:42')
+        result = validate_snapshot([{'text': text, 'tabLabel': '28 Oct26'}], datetime(2026, 9, 25, 6, 4, tzinfo=timezone.utc))['meetings'][0]
+        self.assertEqual(result['sourceAsOf'], '2026-09-25T05:49:42+00:00')
+        self.assertTrue(result['sourceTimeInferred'])
+        self.assertIn('12:49:42 CT', result['sourceTimeLabel'])
+
+    def test_noon_is_not_changed_and_other_future_times_rejected(self):
+        view = {'text': TEXT.replace('24 Sep 2026 10:43:49', '25 Sep 2026 12:49:42'), 'tabLabel': '28 Oct26'}
+        result = validate_snapshot([view], datetime(2026, 9, 25, 18, tzinfo=timezone.utc))['meetings'][0]
+        self.assertEqual(result['sourceAsOf'], '2026-09-25T17:49:42+00:00')
+        with self.assertRaises(ValueError): validate_snapshot([view], datetime(2026, 9, 25, 9, tzinfo=timezone.utc))
+        view['text'] = view['text'].replace('12:49:42', '13:49:42')
+        with self.assertRaises(ValueError): validate_snapshot([view], datetime(2026, 9, 25, 6, tzinfo=timezone.utc))
+
 if __name__ == '__main__': unittest.main()
