@@ -23,6 +23,24 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Collect and validate every CME meeting
         run: python collector.py
+      - name: Publish validated probabilities
+        env:
+          INGEST_KEY: ${{ secrets.FEDWATCH_INGEST_KEY }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, urllib.request
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs):
+                  return None
+          payload = pathlib.Path('result/latest.json').read_bytes()
+          request = urllib.request.Request('https://chain-pulse-fedwatch-data.jaedonwu.workers.dev/ingest', data=payload, headers={'Authorization': 'Bearer ' + os.environ['INGEST_KEY'], 'Content-Type': 'application/json'}, method='POST')
+          try:
+              with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
+                  assert response.status == 200
+              print('Validated probabilities published successfully.')
+          except Exception:
+              raise SystemExit('Publishing failed; previous dashboard data is retained.')
+          PY
       - name: Save validated data
         uses: actions/upload-artifact@v4
         with:
