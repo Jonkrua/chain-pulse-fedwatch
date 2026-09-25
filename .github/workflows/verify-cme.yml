@@ -24,12 +24,12 @@ jobs:
           import asyncio, json, pathlib, re, time
           from datetime import datetime, timezone
           from playwright.async_api import async_playwright
-          SOURCE = 'https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html'
+          SOURCE = 'https://www.cmegroup.cn/fed-watch/'
           out = pathlib.Path('result')
           out.mkdir(exist_ok=True)
           async def main():
               async with async_playwright() as p:
-                  browser = await p.chromium.launch(headless=True, args=['--disable-http2'])
+                  browser = await p.chromium.launch(headless=True)
                   page = await browser.new_page(viewport={'width': 1440, 'height': 1100})
                   try:
                       response = await page.goto(SOURCE, wait_until='domcontentloaded', timeout=60000)
@@ -72,9 +72,16 @@ jobs:
                       result = {'source': SOURCE, 'collectedAt': datetime.now(timezone.utc).isoformat(), 'meetings': meetings, 'validated': False}
                       (out / 'raw.json').write_text(json.dumps(result, indent=2))
                       print(f'Collected {len(meetings)} meeting views. Raw output requires validation before publication.')
+                  except Exception as error:
+                      (out / 'error.txt').write_text(str(error))
+                      print('Collection error:', str(error))
+                      raise
                   finally:
-                      (out / 'page.txt').write_text(await page.locator('body').inner_text(timeout=5000))
-                      print('Frame URLs:', [f.url.split('?')[0] for f in page.frames])
+                      try:
+                          (out / 'page.txt').write_text(await page.locator('body').inner_text(timeout=5000))
+                          print('Frame URLs:', [f.url.split('?')[0] for f in page.frames])
+                      except Exception as diagnostic_error:
+                          print('Diagnostic unavailable:', type(diagnostic_error).__name__)
                       await browser.close()
           asyncio.run(main())
       - name: Save diagnostic output
