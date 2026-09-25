@@ -74,7 +74,14 @@ def validate_snapshot(views, collected_at=None):
     for m in meetings:
         stamp = datetime.fromisoformat(m['sourceAsOf'])
         if (stamp - now).total_seconds() > 300:
-            raise ValueError("Future source timestamp")
+            local = stamp.astimezone(ZoneInfo('America/Chicago'))
+            candidate = local.replace(hour=0).astimezone(timezone.utc)
+            # CME displays 12:xx CT without AM/PM around midnight. Only infer
+            # midnight on the same Chicago date within a two-hour window.
+            if local.hour != 12 or local.date() != now.astimezone(ZoneInfo('America/Chicago')).date() or not 0 <= (now - candidate).total_seconds() <= 7200:
+                raise ValueError("Future source timestamp")
+            m['sourceAsOf'] = candidate.isoformat()
+            m['sourceTimeInferred'] = True
         if m['date'] < now.astimezone(ZoneInfo('America/Chicago')).date().isoformat():
             raise ValueError("Past meeting in upcoming probability feed")
     if len({(m['currentLower'], m['currentUpper']) for m in meetings}) != 1:
