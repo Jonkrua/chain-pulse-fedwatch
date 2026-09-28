@@ -60,4 +60,22 @@ class ParserTests(unittest.TestCase):
         view['text'] = view['text'].replace('12:49:42', '13:49:42')
         with self.assertRaises(ValueError): validate_snapshot([view], datetime(2026, 9, 25, 6, tzinfo=timezone.utc))
 
+    def test_evening_clock_does_not_regress_to_morning(self):
+        view = {'text': TEXT.replace('24 Sep 2026 10:43:49', '27 Sep 2026 08:39:34'), 'tabLabel': '28 Oct26'}
+        result = validate_snapshot([view], datetime(2026, 9, 28, 1, 53, tzinfo=timezone.utc))['meetings'][0]
+        self.assertEqual(result['sourceAsOf'], '2026-09-28T01:39:34+00:00')
+        self.assertTrue(result['sourceTimeInferred'])
+        self.assertIn('27 Sep 2026 08:39:34 CT', result['sourceTimeLabel'])
+
+    def test_morning_clock_stays_morning(self):
+        view = {'text': TEXT, 'tabLabel': '28 Oct26'}
+        result = validate_snapshot([view], datetime(2026, 9, 24, 16, tzinfo=timezone.utc))['meetings'][0]
+        self.assertEqual(result['sourceAsOf'], '2026-09-24T15:43:49+00:00')
+        self.assertFalse(result.get('sourceTimeInferred', False))
+
+    def test_previous_day_clock_is_not_made_fresh(self):
+        view = {'text': TEXT, 'tabLabel': '28 Oct26'}
+        result = validate_snapshot([view], datetime(2026, 9, 26, 4, tzinfo=timezone.utc))['meetings'][0]
+        self.assertEqual(result['sourceAsOf'], '2026-09-24T15:43:49+00:00')
+
 if __name__ == '__main__': unittest.main()
