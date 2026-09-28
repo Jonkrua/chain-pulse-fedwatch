@@ -73,6 +73,17 @@ def validate_snapshot(views, collected_at=None):
         raise ValueError("Missing, duplicated, or out-of-order meetings")
     for m in meetings:
         stamp = datetime.fromisoformat(m['sourceAsOf'])
+        local = stamp.astimezone(ZoneInfo('America/Chicago'))
+        # The displayed clock omits AM/PM. Only resolve an alternate half-day
+        # when it is on the displayed date and within two hours of collection.
+        # Keep the original label and explicitly mark this as an inference.
+        if 1 <= local.hour <= 12:
+            alternate_hour = 0 if local.hour == 12 else local.hour + 12
+            candidate = local.replace(hour=alternate_hour).astimezone(timezone.utc)
+            if not 0 <= (now - stamp).total_seconds() <= 7200 and 0 <= (now - candidate).total_seconds() <= 7200:
+                m['sourceAsOf'] = candidate.isoformat()
+                m['sourceTimeInferred'] = True
+                stamp = candidate
         if (stamp - now).total_seconds() > 300:
             local = stamp.astimezone(ZoneInfo('America/Chicago'))
             candidate = local.replace(hour=0).astimezone(timezone.utc)
